@@ -1,0 +1,54 @@
+
+"""
+PART 1 — MEMBER 1: CONFIGURATION & CONSTANTS
+MINN2020A
+Responsibilities:
+ - Provide project constants, plotting/theme helpers, and sample metadata.
+ - Act as the "interface/config" piece (no Streamlit dependency here; simple console helpers).
+ - This script is independent: it will create sample CSVs if they don't exist.
+"""
+
+import os
+from datetime import datetime
+import json
+
+PROJECT_NAME = "MINN2020A - African Critical Minerals"
+CURRENT_YEAR = datetime.now().year
+
+DATA_FOLDER = "minn_data"
+USERS_CSV = os.path.join(DATA_FOLDER, "users.csv")
+COUNTRIES_CSV = os.path.join(DATA_FOLDER, "countries.csv")
+MINERALS_CSV = os.path.join(DATA_FOLDER, "minerals.csv")
+PRODUCTION_CSV = os.path.join(DATA_FOLDER, "production_stats.csv")
+SITES_CSV = os.path.join(DATA_FOLDER, "sites.csv")
+
+THEME = {
+    "bg_color": "#C7E8F7",
+    "accent": "#1B5E20",
+    "gold": "#D4AF37"
+}
+
+def ensure_data_folder():
+    os.makedirs(DATA_FOLDER, exist_ok=True)
+
+def write_sample_metadata():
+    ensure_data_folder()
+    meta = {
+        "project": PROJECT_NAME,
+        "year": CURRENT_YEAR,
+        "description": "Sample config/metadata for MINN2020A project.",
+        "members": {
+            "member1": "Config & Theme",
+            "member2": "Data & Validation",
+            "member3": "Auth & Navigation (simulated)",
+            "member4": "Analysis & Output"
+        }
+    }
+    with open(os.path.join(DATA_FOLDER, "metadata.json"), "w") as fh:
+        json.dump(meta, fh, indent=2)
+    print(f"[Config] Wrote metadata.json to {DATA_FOLDER}/")
+
+if __name__ == "__main__":
+    ensure_data_folder()
+    write_sample_metadata()
+    print(f"[Config] {PROJECT_NAME} constants available. Data folder: {DATA_FOLDER}")
