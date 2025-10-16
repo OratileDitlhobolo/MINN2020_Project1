@@ -1,1 +1,404 @@
+import os
+from datetime import datetime
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import folium
+from folium.plugins import MarkerCluster
+from streamlit_folium import st_folium
+
+# --- 1. CONFIGURATION AND STYLING ---
+st.set_page_config(
+    page_title="African Critical Minerals Dashboard",
+    page_icon="⛏️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# Professional CSS Styling (Sky Blue, Forest Green, and Gold Theme)
+st.markdown(
+    """
+    <style>
+     /* Main background and font */
+    .stApp { 
+        background-color: #C7E8F7; /* Sky Blue Main Background */
+        color: #333;
+        font-family: 'Inter', sans-serif;
+    }
+    /* Main Header */
+    .header { 
+        text-align: center; 
+        color: #1B5E20; /* Brighter Forest Green for visibility */
+        font-weight: 800; 
+        padding-top: 15px; 
+    }
+    /* Custom KPI Cards */
+    div[data-testid="stMetric"] {
+        background-color: #B3E5FC; /* Slightly Deeper Sky Blue for KPI Cards */
+        border-radius: 12px;
+        padding: 15px 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        border-left: 5px solid #D4AF37; /* Gold/Bronze accent */
+        transition: transform 0.2s;
+    }
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-3px);
+    }
+    /* Role header styling */
+    h2 { color: #1B5E20; } /* Brighter Forest Green for visibility */
+    h3 { color: #333; border-bottom: 2px solid #E0E0E0; padding-bottom: 5px;}
+    .stDownloadButton > button {
+        background-color: #1B5E20 !important; /* Brighter Forest Green */
+        color: white !important;
+        border-radius: 8px;
+        border: 1px solid #1B5E20;
+    }
+    .stTabs [data-testid="stTab"] {
+        font-size: 16px;
+        font-weight: bold;
+        color: #1B5E20; /* Brighter Forest Green */
+    }
+    /* Specific text elements for color */
+    span[style*="#0A3F1F"] {
+        color: #1B5E20 !important; /* Ensure dynamic text uses the new color */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Custom Plotly Template
+PLOTLY_TEMPLATE = {
+    "layout": {
+        "plot_bgcolor": "#C7E8F7",  # Sky Blue Chart Plot Area
+        "paper_bgcolor": "#C7E8F7", # Sky Blue Chart Paper Area
+        "font": {"color": "#333333"},
+        "xaxis": {"gridcolor": "#A9D4F0"}, # Grid lines slightly darker blue
+        "yaxis": {"gridcolor": "#A9D4F0"},
+    }
+}
+
+# --- 2. DATA LOADING AND PROCESSING (Colab Adapted) ---
+# Sample data to ensure the map works even if the user uploads an incorrect sites.csv
+def get_sample_sites_df():
+    """Generates a DataFrame with valid site data using available Country/Mineral IDs."""
+    # This sample is kept for robustness in case other files are missing, but the main sites_df is now hardcoded below.
+    return pd.DataFrame({
+        'SiteID': [101, 102, 103, 104, 105, 106],
+        'CountryID': [1, 2, 3, 4, 1, 2],
+        'MineralID': [1, 2, 3, 4, 2, 1],
+        'SiteName': ['Kolwezi Mine', 'Bushveld PGM', 'Balama Graphite', 'Otjozondu Manganese', 'Kamoto Copper', 'Marikana PGM'],
+        'Latitude': [-10.7, -25.7, -12.8, -21.5, -10.9, -25.5],
+        'Longitude': [25.4, 28.2, 38.9, 17.2, 25.5, 27.5],
+    })
+
+@st.cache_data
+def load_and_process_data():
+    """Loads all data, handles potential errors, and performs enrichment."""
+    
+    # Load required data files
+    users_df = pd.read_csv("users.csv")
+    roles_df = pd.read_csv("roles.csv")
+    countries_df = pd.read_csv("countries.csv")
+    minerals_df = pd.read_csv("minerals.csv")
+    production_df = pd.read_csv("production_stats.csv")
+    
+    # --- HARDCODED SITES DATA (Per User Request) ---
+    sites_df = pd.DataFrame({
+        'SiteID': [1, 2, 3, 4],
+        'SiteName': ['Kolwezi Mine', 'Greenbushes Lithium', 'Balama Graphite', 'Kalahari Manganese'],
+        'CountryID': [1, 2, 3, 4],
+        'MineralID': [1, 2, 3, 4],
+        'Latitude': [-10.7167, -33.8667, -13.3333, -27.0833],
+        'Longitude': [25.4667, 116.0667, 38.7667, 22.95],
+        'Production_tonnes': [100000, 120000, 50000, 200000]
+    })
+    # The sites_df is now hardcoded, skipping the file read.
+
+    # 1. Enrich Users with Roles
+    users_df = users_df.merge(roles_df, on="RoleID", how="left")
+    # Note: We keep Username_norm for future use, but the new login uses Email directly
+    users_df["Username_norm"] = users_df["Username"].astype(str).str.lower()
+    # Normalize Email for case-insensitive login check
+    users_df["Email"] = users_df["Email"].astype(str).str.lower()
+
+
+    # 2. Enrich Production Data
+    prod = production_df.merge(
+        countries_df, on="CountryID", how="left"
+    ).merge(
+        minerals_df, on="MineralID", how="left"
+    )
+
+    # 3. Validate Sites Data & Enrichment
+    sites_data_valid = False
+    required_site_cols = {'Latitude', 'Longitude', 'SiteName', 'CountryID', 'MineralID'}
+    
+    # Since sites_df is now hardcoded, it should always contain these columns.
+    if required_site_cols.issubset(sites_df.columns):
+        sites_data_valid = True
+        # Enrich Sites data
+        sites = sites_df.merge(
+            countries_df, on="CountryID", how="left"
+        ).merge(
+            minerals_df, on="MineralID", how="left"
+        )
+        # Clean coordinates
+        sites["Latitude"] = pd.to_numeric(sites["Latitude"], errors="coerce")
+        sites["Longitude"] = pd.to_numeric(sites["Longitude"], errors="coerce")
+        sites.dropna(subset=["Latitude", "Longitude"], inplace=True)
+    else:
+        # Should not happen with hardcoded data
+        sites = pd.DataFrame()
+
+    return users_df, countries_df, minerals_df, prod, sites, sites_data_valid
+
+# Execute data loading
+try:
+    users_df, countries_df, minerals_df, prod, sites, sites_data_valid = load_and_process_data()
+except FileNotFoundError as e:
+    # This now only catches errors from the other 5 CSVs, as sites.csv is hardcoded.
+    st.error(f"Fatal Error: A required data file is missing: `{e.filename}`. Please ensure all necessary CSV files are uploaded to the Colab environment.")
+    st.stop()
+
+
+# --- 3. AUTHENTICATION & NAVIGATION SETUP ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.current_page = "Overview"
+
+with st.sidebar:
+    st.subheader("🔐 Access Portal")
+    if not st.session_state.logged_in:
+        # CHANGED: Requesting Email instead of Username
+        u_in = st.text_input("Email", key="u_in")
+        p_in = st.text_input("Password", type="password", key="p_in")
+        
+        if st.button("Sign in", use_container_width=True):
+            # CHANGED: Filtering by Email instead of Username_norm
+            match = users_df[
+                (users_df["Email"] == str(u_in).lower()) & 
+                (users_df["PasswordHash"] == str(p_in))
+            ]
+            if not match.empty:
+                user = match.iloc[0]
+                st.session_state.update({
+                    "logged_in": True, "username": user["Username"],
+                    "roleid": int(user["RoleID"]), "rolename": user["RoleName"],
+                    "permissions": user["Permissions"]
+                })
+                st.success(f"Welcome, {user['Username']}!")
+                st.balloons()
+                st.rerun()
+            else:
+                st.error("Invalid email or password.")
+    else:
+        st.markdown(f"**👤 User:** <span style='color:#1B5E20;'>{st.session_state.username}</span>", unsafe_allow_html=True)
+        st.markdown(f"**🌟 Role:** <span style='color:#D4AF37;'>{st.session_state.rolename}</span>", unsafe_allow_html=True)
+        
+        # --- CREATIVE NAVIGATION (IMPROVED ROLE-BASED ACCESS) ---
+        st.markdown("---")
+        st.subheader("🚀 Main Sections")
+        
+        roleid = st.session_state.roleid
+        pages = ["Overview"]
+        
+        # All roles get Map and Analysis (though content is restricted within Analysis)
+        if roleid in [1, 2, 3]:
+            pages.append("Geographical Map")
+            pages.append("Analysis & Trends")
+        
+        # Only Admin (1) and Researcher (3) get Data Explorer
+        if roleid in [1, 3]:
+            pages.append("Data Explorer")
+
+        # Handle the case where the user's current page is no longer visible (e.g., Investor was on Data Explorer)
+        if st.session_state.current_page not in pages:
+            st.session_state.current_page = "Overview"
+
+        selected_page = st.radio("Navigate to:", pages, index=pages.index(st.session_state.current_page))
+        st.session_state.current_page = selected_page
+        
+        st.markdown("---")
+        if st.button("Sign out", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.current_page = "Overview"
+            st.rerun()
+
+if not st.session_state.logged_in:
+    st.markdown("<h1 class='header'>⛏️ African Critical Minerals — Executive Dashboard</h1>", unsafe_allow_html=True)
+    st.stop()
+
+
+# --- 4. GLOBAL FILTERS ---
+st.sidebar.markdown("---")
+st.sidebar.header("Filter Data")
+country_opts = ["All Africa"] + sorted(prod["CountryName"].dropna().unique())
+mineral_opts = ["All Minerals"] + sorted(prod["MineralName"].dropna().unique())
+selected_country = st.sidebar.selectbox("Filter by Country", country_opts)
+selected_mineral = st.sidebar.selectbox("Filter by Mineral", mineral_opts)
+
+def apply_filters(df):
+    out = df.copy()
+    if selected_country != "All Africa":
+        out = out[out["CountryName"] == selected_country]
+    if selected_mineral != "All Minerals":
+        out = out[out["MineralName"] == selected_mineral]
+    return out
+
+prod_f = apply_filters(prod)
+sites_f = apply_filters(sites) if sites_data_valid else sites
+roleid = st.session_state.roleid
+
+
+# --- 5. PAGE FUNCTIONS ---
+
+def page_overview():
+    """Renders the main executive overview and KPIs."""
+    st.markdown("<h1 class='header'>🌎 Overview: Executive Summary</h1>", unsafe_allow_html=True)
+    st.markdown("---")
+    
+    st.subheader("Key Performance Indicators (KPIs)")
+    k1, k2, k3, k4 = st.columns(4)
+    total_prod = prod_f['Production_tonnes'].sum()
+    total_export = prod_f['ExportValue_BillionUSD'].sum()
+    k1.metric("Total Production (tonnes)", f"{total_prod:,.0f}")
+    k2.metric("Total Export Value (Billion USD)", f"${total_export:,.1f}")
+    k3.metric("Active Countries", prod_f["CountryName"].nunique())
+    k4.metric("Monitored Minerals", prod_f["MineralName"].nunique())
+    
+    st.markdown("---")
+    
+    # Simple Production Trend for all users on Overview
+    st.subheader("Africa-wide Production Trend")
+    trend = prod_f.groupby("Year")["Production_tonnes"].sum().reset_index()
+    fig1 = px.line(trend, x="Year", y="Production_tonnes", title="Annual Production Trend (tonnes)", markers=True, template=PLOTLY_TEMPLATE)
+    st.plotly_chart(fig1, use_container_width=True)
+
+
+def page_map():
+    """Renders the Geographical Map visualization."""
+    st.markdown("<h1 class='header'>📍 Geographical Map & Site Locations</h1>", unsafe_allow_html=True)
+    st.markdown("---")
+    
+    if sites_data_valid:
+        st.subheader(f"Interactive Map (Filtered by: {selected_country} / {selected_mineral})")
+        
+        m = folium.Map(location=[-10, 25], zoom_start=4, tiles="cartodbpositron")
+        marker_cluster = MarkerCluster().add_to(m)
+        
+        for _, r in sites_f.iterrows():
+            popup_html = f"""
+                <b>Site: {r['SiteName']}</b><br>
+                Country: {r['CountryName']}<br>
+                Mineral: {r['MineralName']}
+            """
+            folium.Marker(
+                location=[r["Latitude"], r["Longitude"]],
+                popup=folium.Popup(popup_html, max_width=300),
+                icon=folium.Icon(color="darkgreen", icon="industry", prefix="fa")
+            ).add_to(marker_cluster)
+        
+        st_folium(m, height=550, use_container_width=True)
+
+        if roleid in [1, 3]: # Admin and Researcher get site details
+            st.markdown("---")
+            st.subheader("Detailed Site List")
+            st.dataframe(sites_f[['SiteName', 'CountryName', 'MineralName', 'Latitude', 'Longitude']].rename(columns={'CountryName': 'Country', 'MineralName': 'Mineral'}), use_container_width=True)
+
+    else:
+        st.error("Geographical Map is currently unavailable. Please upload a `sites.csv` file with the required `Latitude` and `Longitude` columns.")
+
+
+def page_analysis():
+    """Renders all financial charts, production analysis, and profiles."""
+    st.markdown("<h1 class='header'>📈 Analysis & Trends</h1>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Investor/Admin Content
+    if roleid in [1, 2]:
+        st.subheader("💰 Financial & Market Analysis (Investor View)")
+        
+        # Country Profile Section
+        st.markdown("### Country & Mineral Profiles")
+        sel_country = st.selectbox("Select a Country for Detailed Profile", countries_df['CountryName'].unique())
+        
+        if sel_country:
+            country_data = countries_df[countries_df['CountryName'] == sel_country].iloc[0]
+            c1, c2 = st.columns(2)
+            c1.metric("GDP (Billion USD)", f"${country_data['GDP_BillionUSD']:,.1f}")
+            c2.metric("Mining Revenue (Billion USD)", f"${country_data['MiningRevenue_BillionUSD']:,.1f}")
+            st.info(f"**Key Projects:** {country_data['KeyProjects']}")
+
+        # Export Value Chart
+        st.markdown("### Export Value Analysis by Country")
+        by_country = prod_f.groupby("CountryName")["ExportValue_BillionUSD"].sum().reset_index().sort_values("ExportValue_BillionUSD", ascending=False)
+        fig2 = px.bar(by_country.head(10), x="CountryName", y="ExportValue_BillionUSD", title="Top 10 Countries by Export Value", template=PLOTLY_TEMPLATE)
+        fig2.update_traces(marker_color='#D4AF37')
+        st.plotly_chart(fig2, use_container_width=True)
+
+    # Researcher/Admin Content
+    if roleid in [1, 3]:
+        st.subheader("🔬 Production Breakdown (Researcher View)")
+        
+        # Production Hierarchy Treemap
+        st.markdown("### Production Hierarchy by Country and Mineral")
+        tree_data = prod_f.groupby(['CountryName', 'MineralName'])['Production_tonnes'].sum().reset_index()
+        fig_tree = px.treemap(
+            tree_data, path=['CountryName', 'MineralName'], values='Production_tonnes',
+            title='Production Hierarchy (tonnes)', color='Production_tonnes',
+            color_continuous_scale='Greens', template=PLOTLY_TEMPLATE
+        )
+        st.plotly_chart(fig_tree, use_container_width=True)
+
+
+def page_data():
+    """Renders the raw data explorer and download options."""
+    st.markdown("<h1 class='header'>🗃️ Data Explorer</h1>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Admin View: Editable Data (Full Access)
+    if roleid == 1:
+        st.subheader("👑 Administrator: Raw Data Tables (Editable)")
+        tab1, tab2, tab3, tab4 = st.tabs(["Production Data", "Site Locations", "Countries Ref", "Minerals Ref"])
+        
+        with tab1: 
+            st.data_editor(prod_f, num_rows="dynamic")
+        with tab2: 
+            st.data_editor(sites_f if sites_data_valid else get_sample_sites_df(), num_rows="dynamic")
+        with tab3:
+            st.data_editor(countries_df, num_rows="dynamic")
+        with tab4:
+            st.data_editor(minerals_df, num_rows="dynamic")
+
+    # Researcher View: Viewable/Downloadable Data
+    elif roleid == 3:
+        st.subheader("🔬 Researcher: Downloadable Datasets")
+        tab1, tab2 = st.tabs(["Production Data", "Reference Data"])
+        
+        with tab1:
+            st.dataframe(prod_f)
+            st.download_button("Download Production Data (.csv)", prod_f.to_csv(index=False), "production_data.csv", "text/csv")
+        with tab2:
+            st.dataframe(minerals_df)
+            st.download_button("Download Minerals Data (.csv)", minerals_df.to_csv(index=False), "minerals_data.csv", "text/csv")
+            
+    # Investor/Default: No Access to raw tables
+    else:
+        # This section is now unreachable for Investor, but kept for robustness
+        st.warning("You do not have permission to view raw data tables. Please use the **Analysis & Trends** section.")
+
+
+# --- 6. PAGE DISPATCHER ---
+if st.session_state.current_page == "Overview":
+    page_overview()
+elif st.session_state.current_page == "Geographical Map":
+    page_map()
+elif st.session_state.current_page == "Analysis & Trends":
+    page_analysis()
+elif st.session_state.current_page == "Data Explorer":
+    page_data()
+
+st.markdown("---")
+st.caption(f"© {datetime.now().year} African Critical Minerals Project. Data is filtered using the sidebar controls.")
 
