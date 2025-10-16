@@ -1,7 +1,6 @@
 
 """
-PART 1 — MEMBER 1: CONFIGURATION & CONSTANTS
-MINN2020A
+PART 1: CONFIGURATION & CONSTANTS
 Responsibilities:
  - Provide project constants, plotting/theme helpers, and sample metadata.
  - Act as the "interface/config" piece (no Streamlit dependency here; simple console helpers).
