@@ -1,7 +1,7 @@
 
 """
-PART 3 — MEMBER 3: ANALYSIS & AUTHENTICATION SIM (SIMPLIFIED)
-MINN2020A
+PART 3: ANALYSIS & AUTHENTICATION SIM (SIMPLIFIED)
+
 Responsibilities:
  - Provide core analysis functions: aggregation, trend summaries, top-k exports.
  - Provide a tiny authentication simulation to show role-based branching (no real security).
