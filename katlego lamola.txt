@@ -1,11 +1,8 @@
 
 """
-PART 2 — MEMBER 2: DATA LOADING, GENERATION & VALIDATION
-MINN2020A
-Responsibilities:
- - Load CSVs if present; otherwise generate realistic sample datasets.
+DATA LOADING, GENERATION & VALIDATION
+ - Load CSVs if present; otherwise, generate realistic sample datasets.
  - Validate required columns and export clean CSVs for reproducibility.
- - Self-contained: generates its own sample CSVs in minn_data if missing.
 """
 
 import os
@@ -25,8 +22,8 @@ sites_csv = os.path.join(DATA_FOLDER, "sites.csv")
 def generate_sample_data():
     users = pd.DataFrame({
         "UserID": [1,2,3],
-        "Username": ["alice","bob","carol"],
-        "PasswordHash": ["pass1","pass2","pass3"],
+        "Username": ["admin01","investor01","researcher01"],
+        "PasswordHash": ["hash123","hash456","hash789"],
         "RoleID": [1,2,3]
     })
     users.to_csv(users_csv, index=False)
