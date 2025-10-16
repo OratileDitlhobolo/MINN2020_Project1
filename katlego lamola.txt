@@ -1,0 +1,103 @@
+
+"""
+PART 2 — MEMBER 2: DATA LOADING, GENERATION & VALIDATION
+MINN2020A
+Responsibilities:
+ - Load CSVs if present; otherwise generate realistic sample datasets.
+ - Validate required columns and export clean CSVs for reproducibility.
+ - Self-contained: generates its own sample CSVs in minn_data if missing.
+"""
+
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+DATA_FOLDER = "minn_data"
+os.makedirs(DATA_FOLDER, exist_ok=True)
+
+users_csv = os.path.join(DATA_FOLDER, "users.csv")
+countries_csv = os.path.join(DATA_FOLDER, "countries.csv")
+minerals_csv = os.path.join(DATA_FOLDER, "minerals.csv")
+prod_csv = os.path.join(DATA_FOLDER, "production_stats.csv")
+sites_csv = os.path.join(DATA_FOLDER, "sites.csv")
+
+def generate_sample_data():
+    users = pd.DataFrame({
+        "UserID": [1,2,3],
+        "Username": ["alice","bob","carol"],
+        "PasswordHash": ["pass1","pass2","pass3"],
+        "RoleID": [1,2,3]
+    })
+    users.to_csv(users_csv, index=False)
+
+    countries = pd.DataFrame({
+        "CountryID":[1,2,3,4],
+        "CountryName":["DR Congo","South Africa","Mozambique","Namibia"],
+        "GDP_BillionUSD":[50.1,350.5,15.2,12.3],
+        "MiningRevenue_BillionUSD":[5.2,60.3,2.1,1.8],
+        "KeyProjects":["Cu & Co belt","PGM cluster","Graphite expansion","Manganese port"]
+    })
+    countries.to_csv(countries_csv, index=False)
+
+    minerals = pd.DataFrame({
+        "MineralID":[1,2,3,4],
+        "MineralName":["Copper","PGM","Graphite","Manganese"]
+    })
+    minerals.to_csv(minerals_csv, index=False)
+
+    years = list(range(2015, datetime.now().year+1))
+    prod_rows = []
+    for c in countries["CountryID"]:
+        for m in minerals["MineralID"]:
+            for y in years:
+                prod_rows.append({
+                    "CountryID": c,
+                    "MineralID": m,
+                    "Year": y,
+                    "Production_tonnes": int(abs(np.random.normal(100000*(m+0.5)*c, 20000))),
+                    "ExportValue_BillionUSD": round(abs(np.random.normal(1.0*(m+0.5)*c, 0.5)),2)
+                })
+    production = pd.DataFrame(prod_rows)
+    production.to_csv(prod_csv, index=False)
+
+    sites = pd.DataFrame({
+        "SiteID": [101,102,103,104],
+        "CountryID": [1,2,3,4],
+        "MineralID": [1,2,3,4],
+        "SiteName": ["Kolwezi Mine","Bushveld PGM","Balama Graphite","Otjozondu Manganese"],
+        "Latitude": [-10.7, -25.7, -12.8, -21.5],
+        "Longitude": [25.4, 28.2, 38.9, 17.2]
+    })
+    sites.to_csv(sites_csv, index=False)
+    print("[Data] Sample CSV files generated in 'minn_data/'.")
+
+def load_and_validate():
+    required_files = [users_csv, countries_csv, minerals_csv, prod_csv, sites_csv]
+    missing = [f for f in required_files if not os.path.isfile(f)]
+    if missing:
+        print("[Data] Missing files detected:", missing)
+        print("[Data] Generating sample data...")
+        generate_sample_data()
+
+    users = pd.read_csv(users_csv)
+    countries = pd.read_csv(countries_csv)
+    minerals = pd.read_csv(minerals_csv)
+    production = pd.read_csv(prod_csv)
+    sites = pd.read_csv(sites_csv)
+
+    req_prod_cols = {"CountryID","MineralID","Year","Production_tonnes","ExportValue_BillionUSD"}
+    if not req_prod_cols.issubset(production.columns):
+        raise ValueError("Production CSV missing required columns")
+
+    req_site_cols = {"Latitude","Longitude","SiteName","CountryID","MineralID"}
+    if not req_site_cols.issubset(sites.columns):
+        raise ValueError("Sites CSV missing required columns")
+
+    print("[Data] All required files loaded and validated.")
+    return users, countries, minerals, production, sites
+
+if __name__ == "__main__":
+    users_df, countries_df, minerals_df, prod_df, sites_df = load_and_validate()
+    print(f"[Data] Users: {len(users_df)} rows; Countries: {len(countries_df)}; Minerals: {len(minerals_df)}")
+    print(f"[Data] Production rows: {len(prod_df)}; Sites: {len(sites_df)}")
