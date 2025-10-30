@@ -1,0 +1,89 @@
+
+"""
+PART 4 — MEMBER 4: OUTPUT, REPORT & MAP EXPORT
+MINN2020A
+Responsibilities:
+ - Produce simple plots and an interactive map (folium) saved to HTML.
+ - Export summary CSVs and a minimal console report.
+ - Independent: will generate fallback sample data if CSVs are missing.
+"""
+
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+import folium
+from folium.plugins import MarkerCluster
+
+DATA_FOLDER = "minn_data"
+os.makedirs(DATA_FOLDER, exist_ok=True)
+
+PROD_CSV = os.path.join(DATA_FOLDER, "production_stats.csv")
+SITES_CSV = os.path.join(DATA_FOLDER, "sites.csv")
+
+def ensure_sample_data():
+    if not os.path.isfile(PROD_CSV):
+        print("[Output] production_stats.csv missing — creating small sample.")
+        d = pd.DataFrame({
+            "CountryID":[1,1,2,2],
+            "MineralID":[1,2,1,2],
+            "Year":[2020,2020,2020,2020],
+            "Production_tonnes":[100000,50000,120000,60000],
+            "ExportValue_BillionUSD":[2.5,1.2,3.1,1.4]
+        })
+        d.to_csv(PROD_CSV, index=False)
+    if not os.path.isfile(SITES_CSV):
+        print("[Output] sites.csv missing — creating small sample.")
+        s = pd.DataFrame({
+            "SiteID":[101,102],
+            "CountryID":[1,2],
+            "MineralID":[1,2],
+            "SiteName":["Sample Mine A","Sample Mine B"],
+            "Latitude":[-10.7,-25.7],
+            "Longitude":[25.4,28.2]
+        })
+        s.to_csv(SITES_CSV, index=False)
+
+def export_summary_csv(prod_df):
+    summary = prod_df.groupby(["CountryID","MineralID"])["Production_tonnes"].sum().reset_index()
+    out_path = os.path.join(DATA_FOLDER, "summary_production_by_pair.csv")
+    summary.to_csv(out_path, index=False)
+    print(f"[Output] Summary CSV written to: {out_path}")
+    return out_path
+
+def plot_production_trend(prod_df):
+    yearly = prod_df.groupby("Year")["Production_tonnes"].sum().reset_index()
+    plt.figure(figsize=(8,4))
+    plt.plot(yearly["Year"], yearly["Production_tonnes"], marker='o')
+    plt.title("Total Production (tonnes) by Year")
+    plt.xlabel("Year")
+    plt.ylabel("Production (tonnes)")
+    plt.grid(True)
+    out_fig = os.path.join(DATA_FOLDER, "production_trend.png")
+    plt.savefig(out_fig, bbox_inches="tight")
+    plt.close()
+    print(f"[Output] Production trend chart saved to: {out_fig}")
+    return out_fig
+
+def create_sites_map(sites_df, map_file="sites_map.html"):
+    if sites_df.empty:
+        print("[Output] No sites to map.")
+        return None
+    m = folium.Map(location=[-15, 25], zoom_start=4, tiles="cartodbpositron")
+    mc = MarkerCluster().add_to(m)
+    for _, r in sites_df.iterrows():
+        folium.Marker(
+            location=[r["Latitude"], r["Longitude"]],
+            popup=f"{r.get('SiteName','Site')} (CountryID {r.get('CountryID','-')})"
+        ).add_to(mc)
+    out_path = os.path.join(DATA_FOLDER, map_file)
+    m.save(out_path)
+    print(f"[Output] Interactive map saved to: {out_path}")
+    return out_path
+
+if __name__ == "__main__":
+    ensure_sample_data()
+    prod = pd.read_csv(PROD_CSV)
+    sites = pd.read_csv(SITES_CSV)
+    export_summary_csv(prod)
+    plot_production_trend(prod)
+    create_sites_map(sites)
