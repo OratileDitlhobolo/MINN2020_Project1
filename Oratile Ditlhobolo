@@ -1,7 +1,5 @@
 
 """
-PART 1: CONFIGURATION & CONSTANTS
-Responsibilities:
  - Provide project constants, plotting/theme helpers, and sample metadata.
  - Act as the "interface/config" piece (no Streamlit dependency here; simple console helpers).
  - This script is independent: it will create sample CSVs if they don't exist.
