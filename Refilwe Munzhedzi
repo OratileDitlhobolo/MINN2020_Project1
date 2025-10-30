@@ -1,8 +1,5 @@
 
 """
-PART 4 — MEMBER 4: OUTPUT, REPORT & MAP EXPORT
-MINN2020A
-Responsibilities:
  - Produce simple plots and an interactive map (folium) saved to HTML.
  - Export summary CSVs and a minimal console report.
  - Independent: will generate fallback sample data if CSVs are missing.
